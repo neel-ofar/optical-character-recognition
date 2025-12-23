@@ -171,4 +171,4 @@ You now have a working OCR application!
 
 ---
 
-Made with ❤️ | Free Forever | No API Keys Required
+Made with ❤️ | No API Keys Required
