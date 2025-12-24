@@ -16,12 +16,9 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # Virtual Environment
 venv/
@@ -29,15 +26,6 @@ env/
 ENV/
 env.bak/
 venv.bak/
-
-# Environment Variables
-.env
-.env.local
-.env.*.local
-
-# Flask
-instance/
-.webassets-cache
 
 # IDE
 .vscode/
@@ -47,55 +35,30 @@ instance/
 *~
 .DS_Store
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Application Data
+uploads/
+results/
+exports/
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# Environment
+.env
+.env.local
+
+# OS
+Thumbs.db
+.DS_Store
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
 
-# Logs
-*.log
-logs/
-
-# Uploads & Temp Files
-uploads/
-temp/
-tmp/
-*.tmp
-sample_images/
-test_images/
-
-# EasyOCR Models (large files)
-.EasyOCR/
-models/
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Distribution / Packaging
-.Python
-build/
-dist/
-*.egg-info/
-
-# Render
-.render/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Secrets
-secrets.json
-credentials.json
-*.pem
-*.key
-
-# Cache
-.cache/
-__pycache__/
+# Backup files
+*.backup
+*.bak
+*~
