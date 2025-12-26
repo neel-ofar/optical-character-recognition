@@ -21,8 +21,8 @@ An advanced, all-in-one OCR web application that extracts text from images and P
 
 ## 🚀 Quick Start
 
-###clone and enter project folder
-```bash
+- clone and enter the project folder
+
 # 1. git clone project repo link
 
 # 2. cd projectfolder
