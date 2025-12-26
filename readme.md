@@ -23,9 +23,9 @@ An advanced, all-in-one OCR web application that extracts text from images and P
 
 - clone and enter the project folder
 
-# 1. git clone project repo link
+- 1. git clone project repo link
 
-# 2. cd projectfolder
+- 2. cd projectfolder
 
 ### Prerequisites
 - Docker Desktop installed
@@ -116,13 +116,13 @@ docker run -d -p 8080:5000 ocr-app
 
 🤝 Credits & Tech Stack
 
--Flask – Web framework
--Tesseract OCR – Google's open-source OCR engine
--OpenCV – Image preprocessing
--googletrans – Translation
--pyttsx3 + pydub – Text-to-Speech & MP3 export
--python-docx – DOCX generation
--Docker & Gunicorn – Production-ready deployment
+- Flask – Web framework
+- Tesseract OCR – Google's open-source OCR engine
+- OpenCV – Image preprocessing
+- googletrans – Translation
+- pyttsx3 + pydub – Text-to-Speech & MP3 export
+- python-docx – DOCX generation
+- Docker & Gunicorn – Production-ready deployment
 
 ## 💡 Use Cases
 
