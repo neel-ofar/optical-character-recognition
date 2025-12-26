@@ -1,20 +1,31 @@
-# 🔍 OCR Text Extractor
+# 🔍 OCR Text Extractor Pro
 
-### Check it out : https://optical-character-recognition-op27.onrender.com/
-or ### check it out : http://localhost:5000/
+### Check it out public access : https://optical-character-recognition-op27.onrender.com/
+or ### check it out for local machine(offline) : http://localhost:5000/
 
-Extract text from images using AI-powered OCR technology.
+An advanced, all-in-one OCR web application that extracts text from images and PDFs with AI-powered accuracy — completely offline, no API keys needed.
 
 ## ✨ Features
 
-- 📸 Upload images (JPG, PNG)
-- 🤖 AI-powered text extraction
-- 💾 Save results automatically
-- 🎨 Beautiful web interface
-- 🆓 100% Free - No API keys needed
-- 🐳 Docker-ready deployment
+- 📸 Supports **Images** (JPG, PNG) and **PDFs** (multi-page)
+- 🌍 **Multi-language OCR** (100+ languages via Tesseract)
+- 🔄 **Real-time Translation** (200+ languages via Google Translate)
+- 📝 **Smart Text Summarization** (Brief, Detailed, or Bullet Points)
+- 🔊 **Text-to-Speech (TTS)** with Male/Female voices and 8 emotions (professional, happy, excited, etc.)
+- 💾 Export as **TXT** or **DOCX**
+- 🎵 Export audio as **MP3**
+- 📊 Shows **confidence score**, **word count**, **character count**, and **page count**
+- 🎨 Beautiful, responsive web interface
+- 🐳 Fully Dockerized — runs anywhere
+- 🛡️ No external API dependencies — 100% self-contained
 
 ## 🚀 Quick Start
+
+###clone and enter project folder
+```bash
+# 1. git clone project repo link
+
+# 2. cd projectfolder
 
 ### Prerequisites
 - Docker Desktop installed
@@ -34,21 +45,31 @@ open http://localhost:5000
 
 ## 🎯 How to Use
 
-1. Open http://localhost:5000 in browser
-2. Upload an image with text
-3. Click "Extract Text"
-4. View and download results
+1. Go to http://localhost:5000
+2. Choose OCR language (e.g., French, Hindi, Arabic)
+3. (Optional) Select translation language
+4. Upload an image or PDF
+5. Click "Extract Text"
+6. View results with stats (confidence, word count, etc.)
+7. Summarize (brief/detailed/bullets)
+8. Listen via Text-to-Speech
+9. Download TXT, DOCX, or MP3
 
 ## 📁 Project Structure
 
 ```
-ocr-project/
-├── app.py              # Main application
-├── requirements.txt    # Python dependencies
-├── Dockerfile         # Docker configuration
-├── docker-compose.yml # Docker Compose setup
-├── uploads/           # Uploaded images
-└── results/           # Extracted text (JSON)
+ocr-text-extractor-pro/
+├── app.py                  # Main Flask application
+├── requirements.txt        # Python dependencies
+├── Dockerfile              # Docker build config
+├── docker.yml              # Docker Compose (renamed from docker-compose.yml)
+├── templates/index.html    # Web interface
+├── static/
+│   ├── css/style.css       # Styling
+│   └── js/script.js        # Frontend logic
+├── uploads/                # Uploaded files (auto-created)
+├── results/                # OCR results (JSON, auto-created)
+└── exports/                # Exported TXT/DOCX/MP3 (auto-created)
 ```
 
 ## 🛠️ Commands
@@ -74,6 +95,8 @@ docker-compose up -d --build
 2. Select Docker environment
 3. Deploy
 
+Just connect your GitHub repo and select Docker environment.
+
 ## 🐛 Troubleshooting
 
 **Container won't start?**
@@ -91,36 +114,23 @@ docker run -d -p 8080:5000 ocr-app
 - Check http://localhost:5000 (not https)
 - Try different browser
 
-## 📊 Tech Stack
+🤝 Credits & Tech Stack
 
-- **Backend:** Flask (Python)
-- **OCR Engine:** Tesseract
-- **Image Processing:** OpenCV
-- **Container:** Docker
-- **Web Server:** Gunicorn
-
-## 🎓 What It Does
-
-1. User uploads image
-2. Image preprocessed (denoising, enhancement)
-3. Tesseract extracts text
-4. Results displayed with confidence score
-5. Files saved for later access
+-Flask – Web framework
+-Tesseract OCR – Google's open-source OCR engine
+-OpenCV – Image preprocessing
+-googletrans – Translation
+-pyttsx3 + pydub – Text-to-Speech & MP3 export
+-python-docx – DOCX generation
+-Docker & Gunicorn – Production-ready deployment
 
 ## 💡 Use Cases
 
-- 📄 Digitize documents
-- 🧾 Process receipts
-- 📸 Extract text from photos
-- 📚 Convert book pages to text
-- 🖼️ Read text from screenshots
-
-## ⚙️ Configuration
-
-Edit these in `app.py`:
-- `MAX_FILE_SIZE`: Maximum upload size (default 16MB)
-- `ALLOWED_EXTENSIONS`: Supported file types
-- `PORT`: Server port (default 5000)
+-Digitize handwritten notes or scanned books
+-Extract text from screenshots or photos
+-Translate foreign documents instantly
+-Generate audio summaries for accessibility
+-Process invoices, forms, receipts, research papers
 
 ## 🔒 Security
 
@@ -133,8 +143,8 @@ Edit these in `app.py`:
 
 - Processing time: 5-10 seconds per image
 - Accuracy: 90-95% for clear printed text
-- Max file size: 16MB
-- Supported formats: JPG, PNG
+- Max file size: 100MB
+- Supported formats: JPG, PNG, JPEG, PDF
 
 ## 🤝 Contributing
 
@@ -148,27 +158,12 @@ Feel free to:
 
 MIT License - Free to use for any purpose
 
-## 🙏 Credits
-
-- **Tesseract OCR** - Google's OCR engine
-- **Flask** - Web framework
-- **OpenCV** - Image processing
-- **Docker** - Containerization
-
 ## 📧 Support
 
-Having issues? Check:
-1. Docker logs: `docker logs ocr-app`
-2. GitHub Issues for similar problems
-
-## 🎉 Success!
-
-You now have a working OCR application!
-
-**Access it at:** http://localhost:5000
-
-**Share it:** Deploy to Railway, Render, or Google Cloud
+Found a bug or have a feature idea?
+Open an issue on GitHub or share your feedback!
 
 ---
 
-Made with ❤️ | No API Keys Required
+Made with❤️ — A powerful, private, all-in-one OCR tool. No API keys. No limits. Just pure performance.
+Enjoy responsibly.

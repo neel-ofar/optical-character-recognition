@@ -4,5 +4,6 @@ venv/
 .git/
 uploads/*
 results/*
+exports/*
 *.md
 *.log

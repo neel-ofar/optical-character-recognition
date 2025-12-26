@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Text Extractor Pro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 OCR Text Extractor Pro</h1>
+        <p class="subtitle">Extract, translate, and convert text to speech from images and PDFs</p>
+
+        <div class="features">
+            <div class="feature-badge">📸 Images (JPG, PNG)</div>
+            <div class="feature-badge">📄 PDF Documents</div>
+            <div class="feature-badge">🌍 All Languages OCR</div>
+            <div class="feature-badge">🔄 Translation Support</div>
+            <div class="feature-badge">🔊 Text-to-Speech</div>
+            <div class="feature-badge">📝 Export TXT</div>
+            <div class="feature-badge">📋 Export DOCX</div>
+            <div class="feature-badge">🎵 Export MP3</div>
+            <div class="feature-badge">📝 Summarize Extracted Text</div>
+        </div>
+
+        <div class="info-box">
+            ℹ️ <strong>Ultimate Version</strong> – Full multi-language OCR, translation, and TTS!
+        </div>
+
+        <div class="lang-select">
+            <label for="ocrLang">OCR Language:</label>
+            <select id="ocrLang">
+                <!-- Full list of Tesseract languages -->
+                <option value="eng" selected>English</option>
+                <option value="fra">French</option>
+                <option value="deu">German</option>
+                <option value="spa">Spanish</option>
+                <option value="chi_sim">Chinese (Simplified)</option>
+                <option value="chi_tra">Chinese (Traditional)</option>
+                <option value="hin">Hindi</option>
+                <option value="ara">Arabic</option>
+                <option value="por">Portuguese</option>
+                <option value="rus">Russian</option>
+                <option value="jpn">Japanese</option>
+                <option value="kor">Korean</option>
+                <option value="ita">Italian</option>
+                <option value="nld">Dutch</option>
+                <option value="tur">Turkish</option>
+                <option value="tel">Telugu</option>
+                <option value="urd">Urdu</option>
+                <!-- Add more as needed -->
+            </select>
+        </div>
+
+        <div class="lang-select">
+            <label for="translateTo">Translate To (Optional):</label>
+            <select id="translateTo">
+                <option value="" selected>No Translation</option>
+                <option value="en">English</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="es">Spanish</option>
+                <option value="zh-cn">Chinese (Simplified)</option>
+                <option value="hi">Hindi</option>
+                <option value="ar">Arabic</option>
+                <option value="pt">Portuguese</option>
+                <option value="ru">Russian</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="Tel">Telugu</option>
+                <option value="Ur">Urdu</option>
+                <!-- Add more as needed -->
+            </select>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <h2>Drop your file here or click to browse</h2>
+            <p>Supports: JPG, PNG, PDF (Max 100MB)</p>
+            <input type="file" id="fileInput" accept="image/jpeg,image/jpg,image/png,application/pdf">
+        </div>
+
+        <button class="btn" id="processBtn" disabled>🚀 Extract Text</button>
+
+        <div class="preview" id="preview"></div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing your file...</p>
+            <p id="loadingMessage">This may take a moment for PDFs</p>
+        </div>
+
+        <div class="result-box" id="resultBox">
+            <h3>
+                <span id="resultTitle">📄 Extracted Text</span>
+                <span class="badge" id="confidenceBadge"></span>
+            </h3>
+            <div class="text-output" id="textOutput"></div>
+
+            <div class="download-buttons">
+                <button class="download-btn" id="downloadTxt">💾 Download TXT</button>
+                <button class="download-btn word" id="downloadDocx">📄 Download DOCX</button>
+            </div>
+
+            <div class="tts-section" id="ttsSection">
+                <h3>🔊 Convert to Speech</h3>
+                <label for="ttsGender">Voice Gender:</label>
+                <select id="ttsGender">
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                </select>
+
+                <label for="ttsTone">Tone/Emotion:</label>
+                <select id="ttsTone">
+                    <option value="neutral">Neutral</option>
+                    <option value="professional">Professional</option>
+                    <option value="friendly">Friendly</option>
+                    <option value="happy">Happy</option>
+                    <option value="excited">Excited</option>
+                    <option value="sad">Sad</option>
+                    <option value="enthusiastic">Enthusiastic</option>
+                    <option value="romantic">Romantic</option>
+                </select>
+
+                <button id="generateAudio">🎤 Generate & Download Audio (MP3)</button>
+            </div>
+
+            <div class="summarizer-section" id="summarizerSection">
+                <h3>📝 Summarize Extracted Text</h3>
+                <label for="summaryMode">Summary Style:</label>
+                <select id="summaryMode">
+                    <option value="brief">Brief (Short Summary)</option>
+                    <option value="detailed">Detailed (Longer Summary)</option>
+                    <option value="bullet">Bullet Points</option>
+                </select>
+
+                <button id="generateSummary">Generate Summary</button>
+
+                <div class="text-output" id="summaryOutput" style="display:none; margin-top:20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

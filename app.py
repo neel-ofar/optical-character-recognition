@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify, render_template_string, send_file
+
+from flask import Flask, request, jsonify, render_template, send_file
 from flask_cors import CORS
 import cv2
 import numpy as np
@@ -6,15 +7,19 @@ import pytesseract
 from PIL import Image
 import os
 from datetime import datetime
-import json
 from werkzeug.utils import secure_filename
 from pathlib import Path
-import io
+import tempfile
 from pdf2image import convert_from_path
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-import tempfile
+from googletrans import Translator
+import pyttsx3
+from pydub import AudioSegment
+import re
+import heapq
+from collections import defaultdict
 
 app = Flask(__name__)
 CORS(app)
@@ -24,14 +29,13 @@ UPLOAD_FOLDER = 'uploads'
 RESULTS_FOLDER = 'results'
 EXPORT_FOLDER = 'exports'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
-MAX_FILE_SIZE = 100 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 100 * 1024 * 1024
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['RESULTS_FOLDER'] = RESULTS_FOLDER
 app.config['EXPORT_FOLDER'] = EXPORT_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
-# Create directories
 Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
 Path(RESULTS_FOLDER).mkdir(exist_ok=True)
 Path(EXPORT_FOLDER).mkdir(exist_ok=True)
@@ -40,662 +44,263 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def preprocess_image(image):
-    """Enhance image quality for better OCR"""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     denoised = cv2.fastNlMeansDenoising(gray)
-    thresh = cv2.adaptiveThreshold(
-        denoised, 255, 
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-        cv2.THRESH_BINARY, 11, 2
-    )
+    thresh = cv2.adaptiveThreshold(denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
     return thresh
 
-def extract_text_from_image(image_path):
-    """Extract text from image using Tesseract OCR"""
+def extract_text_from_image(image_path, lang='eng'):
     try:
         image = cv2.imread(image_path)
         processed = preprocess_image(image)
-        text = pytesseract.image_to_string(processed)
-        data = pytesseract.image_to_data(processed, output_type=pytesseract.Output.DICT)
+        text = pytesseract.image_to_string(processed, lang=lang)
+        data = pytesseract.image_to_data(processed, lang=lang, output_type=pytesseract.Output.DICT)
         confidences = [int(c) for c in data['conf'] if c != '-1']
         avg_confidence = np.mean(confidences) if confidences else 0
-        
-        return {
-            'text': text.strip(),
-            'confidence': float(avg_confidence),
-            'success': True
-        }
+        return {'text': text.strip(), 'confidence': float(avg_confidence), 'success': True}
     except Exception as e:
-        return {
-            'text': '',
-            'confidence': 0,
-            'success': False,
-            'error': str(e)
-        }
+        return {'text': '', 'confidence': 0, 'success': False, 'error': str(e)}
 
-def extract_text_from_pdf(pdf_path):
-    """Extract text from PDF by converting to images"""
+def extract_text_from_pdf(pdf_path, lang='eng'):
     try:
         all_text = []
         total_confidence = []
-        
-        # Convert PDF to images
         images = convert_from_path(pdf_path, dpi=300)
-        
         for i, image in enumerate(images):
-            # Save temporary image
             temp_image = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
             image.save(temp_image.name, 'PNG')
-            
-            # Extract text
-            result = extract_text_from_image(temp_image.name)
-            
+            result = extract_text_from_image(temp_image.name, lang=lang)
             if result['success']:
                 all_text.append(f"\n=== Page {i+1} ===\n{result['text']}")
                 total_confidence.append(result['confidence'])
-            
-            # Cleanup
             os.unlink(temp_image.name)
-        
         combined_text = '\n'.join(all_text)
         avg_confidence = np.mean(total_confidence) if total_confidence else 0
-        
-        return {
-            'text': combined_text.strip(),
-            'confidence': float(avg_confidence),
-            'pages': len(images),
-            'success': True
-        }
+        return {'text': combined_text.strip(), 'confidence': float(avg_confidence), 'pages': len(images), 'success': True}
     except Exception as e:
-        return {
-            'text': '',
-            'confidence': 0,
-            'pages': 0,
-            'success': False,
-            'error': str(e)
-        }
+        return {'text': '', 'confidence': 0, 'pages': 0, 'success': False, 'error': str(e)}
 
-def create_word_document(text, filename):
-    """Create a Word document from text"""
+def translate_text(text, target_lang):
+    try:
+        translator = Translator()
+        translated = translator.translate(text, dest=target_lang)
+        return translated.text, True
+    except Exception as e:
+        return text, False
+
+def create_word_document(text, filename, is_translated=False, translate_lang=None):
     doc = Document()
-    
-    # Add title
-    title = doc.add_heading('OCR Extracted Text', 0)
+    title_text = 'Translated OCR Extracted Text' if is_translated else 'OCR Extracted Text'
+    title = doc.add_heading(title_text, 0)
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    
-    # Add metadata
     meta = doc.add_paragraph()
     meta.add_run(f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n').italic = True
     meta.add_run(f'Source: {filename}\n').italic = True
-    
-    # Add extracted text
+    if is_translated and translate_lang:
+        meta.add_run(f'Translated to: {translate_lang}\n').italic = True
     doc.add_heading('Extracted Content', level=1)
-    
-    # Split text into paragraphs
-    paragraphs = text.split('\n\n')
-    for para in paragraphs:
+    for para in text.split('\n\n'):
         if para.strip():
             p = doc.add_paragraph(para.strip())
             p.style.font.size = Pt(11)
-    
-    # Save to temporary location
-    output_path = os.path.join(
-        app.config['EXPORT_FOLDER'], 
-        f"{filename.rsplit('.', 1)[0]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-    )
+    suffix = '_translated' if is_translated else ''
+    stem = Path(filename).stem
+    output_path = os.path.join(EXPORT_FOLDER, f"{stem}{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx")
     doc.save(output_path)
-    
     return output_path
 
-def create_text_file(text, filename):
-    """Create a text file from extracted text"""
-    output_path = os.path.join(
-        app.config['EXPORT_FOLDER'], 
-        f"{filename.rsplit('.', 1)[0]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    )
-    
+def create_text_file(text, filename, is_translated=False, translate_lang=None):
+    suffix = '_translated' if is_translated else ''
+    stem = Path(filename).stem
+    output_path = os.path.join(EXPORT_FOLDER, f"{stem}{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
     with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(f"OCR Extracted Text\n")
-        f.write(f"{'='*50}\n\n")
+        title_text = 'Translated OCR Extracted Text' if is_translated else 'OCR Extracted Text'
+        f.write(f"{title_text}\n{'='*60}\n\n")
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Source: {filename}\n\n")
-        f.write(f"{'='*50}\n\n")
+        f.write(f"Source: {filename}\n")
+        if is_translated and translate_lang:
+            f.write(f"Translated to: {translate_lang}\n")
+        f.write(f"\n{'='*60}\n\n")
         f.write(text)
-    
     return output_path
 
-# HTML Template
-HTML_TEMPLATE = '''
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCR Text Extractor Pro</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        h1 {
-            color: #667eea;
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1em;
-        }
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 30px;
-        }
-        .feature-badge {
-            background: linear-gradient(135deg, #f8f9ff 0%, #e8ebff 100%);
-            padding: 12px;
-            border-radius: 10px;
-            text-align: center;
-            font-size: 14px;
-            color: #667eea;
-            font-weight: 600;
-        }
-        .upload-area {
-            border: 3px dashed #667eea;
-            border-radius: 15px;
-            padding: 60px 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 30px;
-            background: #f8f9ff;
-        }
-        .upload-area:hover {
-            background: #e8ebff;
-            border-color: #764ba2;
-            transform: translateY(-2px);
-        }
-        .upload-area.dragover {
-            background: #d0d5ff;
-            border-color: #764ba2;
-            transform: scale(1.02);
-        }
-        .upload-icon { font-size: 4em; margin-bottom: 20px; }
-        input[type="file"] { display: none; }
-        .btn-group {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .btn {
-            flex: 1;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-        .btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
-        }
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .btn-secondary {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        }
-        .preview {
-            margin: 30px 0;
-            text-align: center;
-        }
-        .preview img {
-            max-width: 100%;
-            max-height: 400px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 40px;
-        }
-        .spinner {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #667eea;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .result-box {
-            background: linear-gradient(135deg, #f8f9ff 0%, #e8ebff 100%);
-            padding: 30px;
-            border-radius: 15px;
-            margin-top: 30px;
-            border-left: 5px solid #667eea;
-            display: none;
-        }
-        .result-box h3 {
-            color: #667eea;
-            margin-bottom: 20px;
-            font-size: 1.5em;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .badge {
-            display: inline-block;
-            padding: 8px 20px;
-            background: #667eea;
-            color: white;
-            border-radius: 20px;
-            font-size: 14px;
-        }
-        .badge.pdf {
-            background: #ef4444;
-        }
-        .text-output {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            white-space: pre-wrap;
-            font-family: 'Courier New', monospace;
-            max-height: 400px;
-            overflow-y: auto;
-            line-height: 1.8;
-            color: #333;
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
-            margin-top: 15px;
-        }
-        .download-buttons {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .download-btn {
-            background: #10b981;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 15px;
-            transition: all 0.3s;
-            font-weight: 600;
-        }
-        .download-btn:hover {
-            background: #059669;
-            transform: translateY(-2px);
-        }
-        .download-btn.word {
-            background: #2563eb;
-        }
-        .download-btn.word:hover {
-            background: #1d4ed8;
-        }
-        .info-box {
-            background: #fef3c7;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            border-left: 4px solid #f59e0b;
-        }
-        @media (max-width: 768px) {
-            .container { padding: 20px; }
-            h1 { font-size: 2em; }
-            .features { grid-template-columns: 1fr; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔍 OCR Text Extractor Pro</h1>
-        <p class="subtitle">Extract text from images and PDFs with multiple export formats</p>
-        
-        <div class="features">
-            <div class="feature-badge">📸 Images (JPG, PNG)</div>
-            <div class="feature-badge">📄 PDF Documents</div>
-            <div class="feature-badge">📝 Export to TXT</div>
-            <div class="feature-badge">📋 Export to DOCX</div>
-        </div>
-        
-        <div class="info-box">
-            ℹ️ <strong>Enhanced Version</strong> - Now supports PDF files and exports to TXT & DOCX formats!
-        </div>
-        
-        <div class="upload-area" id="uploadArea">
-            <div class="upload-icon">📁</div>
-            <h2>Drop your file here or click to browse</h2>
-            <p style="margin-top: 10px; color: #666;">Supports: JPG, PNG, PDF (Max 50MB)</p>
-            <input type="file" id="fileInput" accept="image/jpeg,image/jpg,image/png,application/pdf">
-        </div>
-        
-        <button class="btn" id="processBtn" disabled>🚀 Extract Text</button>
-        
-        <div class="preview" id="preview"></div>
-        
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p style="font-size: 18px; color: #667eea; font-weight: bold;">Processing your file...</p>
-            <p style="color: #666; margin-top: 10px;" id="loadingMessage">This may take a moment for PDF files</p>
-        </div>
-        
-        <div class="result-box" id="resultBox">
-            <h3>
-                <span id="resultTitle">📄 Extracted Text</span>
-                <span class="badge" id="confidenceBadge"></span>
-            </h3>
-            <div class="text-output" id="textOutput"></div>
-            
-            <div class="download-buttons">
-                <button class="download-btn" id="downloadTxt">💾 Download TXT</button>
-                <button class="download-btn word" id="downloadDocx">📄 Download DOCX</button>
-            </div>
-        </div>
-    </div>
+def create_audio_file(text, gender, tone, filename):
+    engine = pyttsx3.init()
+    emotions = {
+        'professional': {'rate': 150, 'volume': 1.0},
+        'friendly':     {'rate': 160, 'volume': 1.0},
+        'happy':        {'rate': 180, 'volume': 1.0},
+        'excited':      {'rate': 200, 'volume': 1.2},
+        'sad':          {'rate': 120, 'volume': 0.8},
+        'enthusiastic': {'rate': 190, 'volume': 1.1},
+        'romantic':     {'rate': 140, 'volume': 0.9},
+        'neutral':      {'rate': 150, 'volume': 1.0},
+    }
+    params = emotions.get(tone.lower(), emotions['neutral'])
+    engine.setProperty('rate', params['rate'])
+    engine.setProperty('volume', params['volume'])
+    voices = engine.getProperty('voices')
+    selected_voice = next((v.id for v in voices if gender.lower() in v.name.lower()), voices[0].id if voices else None)
+    if selected_voice:
+        engine.setProperty('voice', selected_voice)
+    wav_path = tempfile.NamedTemporaryFile(delete=False, suffix='.wav').name
+    engine.save_to_file(text, wav_path)
+    engine.runAndWait()
+    audio = AudioSegment.from_wav(wav_path)
+    stem = Path(filename).stem
+    output_path = os.path.join(EXPORT_FOLDER, f"{stem}_audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3")
+    audio.export(output_path, format='mp3')
+    os.unlink(wav_path)
+    return output_path
 
-    <script>
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const processBtn = document.getElementById('processBtn');
-        const preview = document.getElementById('preview');
-        const loading = document.getElementById('loading');
-        const loadingMessage = document.getElementById('loadingMessage');
-        const resultBox = document.getElementById('resultBox');
-        const textOutput = document.getElementById('textOutput');
-        const confidenceBadge = document.getElementById('confidenceBadge');
-        const resultTitle = document.getElementById('resultTitle');
-        const downloadTxt = document.getElementById('downloadTxt');
-        const downloadDocx = document.getElementById('downloadDocx');
-        
-        let selectedFile = null;
-        let currentResult = null;
+def summarize_text(text, mode='brief'):
+    """Simple extractive summarization using sentence scoring"""
+    if not text.strip():
+        return "No text to summarize."
 
-        uploadArea.addEventListener('click', () => fileInput.click());
-        
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-        
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-        });
-        
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files[0]) handleFile(e.target.files[0]);
-        });
+    # Clean and split into sentences
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    if len(sentences) <= 1:
+        return text.strip()
 
-        function handleFile(file) {
-            if (file.size > 50 * 1024 * 1024) {
-                alert('❌ File too large! Maximum size is 50MB');
-                return;
-            }
-            
-            const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-            if (!validTypes.includes(file.type)) {
-                alert('❌ Invalid file type! Please upload JPG, PNG, or PDF');
-                return;
-            }
-            
-            selectedFile = file;
-            processBtn.disabled = false;
-            resultBox.style.display = 'none';
-            
-            if (file.type === 'application/pdf') {
-                preview.innerHTML = '<div style="padding: 40px; background: #f8f9ff; border-radius: 15px;"><div style="font-size: 4em; margin-bottom: 20px;">📄</div><h3 style="color: #667eea;">PDF Document Selected</h3><p style="color: #666; margin-top: 10px;">' + file.name + '</p></div>';
-                loadingMessage.textContent = 'Processing PDF... This may take 1-2 minutes for multi-page documents';
-            } else {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    preview.innerHTML = '<img src="' + e.target.result + '" alt="Preview">';
-                };
-                reader.readAsDataURL(file);
-                loadingMessage.textContent = 'Processing image...';
-            }
-        }
+    # Remove common stop words
+    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'few', 'more', 'most', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'just', 'don', 'now'}
 
-        processBtn.addEventListener('click', async () => {
-            if (!selectedFile) return;
-            
-            loading.style.display = 'block';
-            resultBox.style.display = 'none';
-            processBtn.disabled = true;
-            
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-            
-            try {
-                const response = await fetch('/api/ocr', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    currentResult = data;
-                    textOutput.textContent = data.text || 'No text found in file';
-                    confidenceBadge.textContent = data.confidence.toFixed(1) + '% confidence';
-                    
-                    if (data.pages) {
-                        resultTitle.innerHTML = '📄 Extracted Text from PDF';
-                        confidenceBadge.textContent += ' • ' + data.pages + ' pages';
-                        confidenceBadge.classList.add('pdf');
-                    } else {
-                        resultTitle.innerHTML = '📄 Extracted Text';
-                        confidenceBadge.classList.remove('pdf');
-                    }
-                    
-                    resultBox.style.display = 'block';
-                } else {
-                    alert('❌ Error: ' + (data.error || 'Failed to process file'));
-                }
-            } catch (error) {
-                alert('❌ Error: ' + error.message);
-            } finally {
-                loading.style.display = 'none';
-                processBtn.disabled = false;
-            }
-        });
+    # Word frequencies
+    word_frequencies = defaultdict(int)
+    for sentence in sentences:
+        for word in re.findall(r'\w+', sentence.lower()):
+            if word not in stop_words:
+                word_frequencies[word] += 1
 
-        downloadTxt.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/export/txt', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        text: currentResult.text,
-                        filename: selectedFile.name
-                    })
-                });
-                
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'extracted_text_' + Date.now() + '.txt';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                } else {
-                    alert('Failed to create TXT file');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        });
+    # Score sentences
+    sentence_scores = {}
+    for sentence in sentences:
+        for word in re.findall(r'\w+', sentence.lower()):
+            if word in word_frequencies:
+                if len(sentence.split()) < 30:  # avoid too long sentences
+                    if sentence not in sentence_scores:
+                        sentence_scores[sentence] = word_frequencies[word]
+                    else:
+                        sentence_scores[sentence] += word_frequencies[word]
 
-        downloadDocx.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/export/docx', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        text: currentResult.text,
-                        filename: selectedFile.name
-                    })
-                });
-                
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'extracted_text_' + Date.now() + '.docx';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                } else {
-                    alert('Failed to create DOCX file');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        });
-    </script>
-</body>
-</html>
-'''
+    # Get top sentences
+    if mode == 'brief':
+        summary_sentences = heapq.nlargest(3, sentence_scores, key=sentence_scores.get)
+    elif mode == 'detailed':
+        summary_sentences = heapq.nlargest(min(8, len(sentences)//2), sentence_scores, key=sentence_scores.get)
+    elif mode == 'bullet':
+        summary_sentences = heapq.nlargest(7, sentence_scores, key=sentence_scores.get)
+    else:
+        summary_sentences = heapq.nlargest(4, sentence_scores, key=sentence_scores.get)
+
+    # Preserve order
+    summary_sentences = sorted(summary_sentences, key=lambda s: sentences.index(s))
+
+    if mode == 'bullet':
+        return '\n'.join(f"• {s.strip()}" for s in summary_sentences if s.strip())
+    else:
+        return ' '.join(summary_sentences)
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE)
+    return render_template('index.html')
 
 @app.route('/api/ocr', methods=['POST'])
 def ocr_endpoint():
-    """Process uploaded file and extract text"""
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file uploaded'}), 400
-    
     file = request.files['file']
-    
     if file.filename == '':
         return jsonify({'success': False, 'error': 'No file selected'}), 400
-    
     if not allowed_file(file.filename):
         return jsonify({'success': False, 'error': 'Invalid file type'}), 400
-    
+
+    ocr_lang = request.form.get('ocr_lang', 'eng')
+    translate_to = request.form.get('translate_to', '')
+
     try:
-        # Save file
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = secure_filename(file.filename)
-        name, ext = os.path.splitext(filename)
-        saved_filename = f"{name}_{timestamp}{ext}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], saved_filename)
+        stem = Path(filename).stem
+        ext = Path(filename).suffix.lower()
+        saved_filename = f"{stem}_{timestamp}{ext}"
+        filepath = os.path.join(UPLOAD_FOLDER, saved_filename)
         file.save(filepath)
-        
-        # Extract text based on file type
-        if ext.lower() == '.pdf':
-            result = extract_text_from_pdf(filepath)
+
+        if ext == '.pdf':
+            result = extract_text_from_pdf(filepath, lang=ocr_lang)
         else:
-            result = extract_text_from_image(filepath)
-        
-        # Save result
-        if result['success']:
-            result_data = {
-                'timestamp': timestamp,
-                'filename': saved_filename,
-                'text': result['text'],
-                'confidence': result['confidence'],
-                'file_type': ext.lower(),
-                'pages': result.get('pages', 1)
-            }
-            result_file = os.path.join(
-                app.config['RESULTS_FOLDER'], 
-                f"result_{timestamp}.json"
-            )
-            with open(result_file, 'w', encoding='utf-8') as f:
-                json.dump(result_data, f, indent=2, ensure_ascii=False)
-        
+            result = extract_text_from_image(filepath, lang=ocr_lang)
+
+        translated = False
+        if result['success'] and translate_to:
+            result['text'], translated = translate_text(result['text'], translate_to)
+            result['translated'] = translated
+            result['translate_lang'] = translate_to if translated else None
+            if result['success']:
+                text = result['text']
+                word_count = len(text.split())
+                char_count = len(text)  # includes spaces
+                result['word_count'] = word_count
+                result['char_count'] = char_count
+
+        result['translated'] = translated
         return jsonify(result)
-        
     except Exception as e:
-        return jsonify({
-            'success': False, 
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/summarize', methods=['POST'])
+def summarize_endpoint():
+    data = request.get_json()
+    text = data.get('text', '').strip()
+    mode = data.get('mode', 'brief')  # brief, detailed, bullet
+
+    if not text:
+        return jsonify({'error': 'No text to summarize'}), 400
+
+    summary = summarize_text(text, mode=mode)
+    return jsonify({'summary': summary, 'mode': mode})
 
 @app.route('/api/export/txt', methods=['POST'])
 def export_txt():
-    """Export text as TXT file"""
-    try:
-        data = request.get_json()
-        text = data.get('text', '')
-        filename = data.get('filename', 'document')
-        
-        output_path = create_text_file(text, filename)
-        
-        return send_file(
-            output_path,
-            mimetype='text/plain',
-            as_attachment=True,
-            download_name=os.path.basename(output_path)
-        )
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    data = request.get_json()
+    path = create_text_file(
+        data.get('text', ''),
+        data.get('filename', 'document'),
+        data.get('translated', False),
+        data.get('translate_lang')
+    )
+    return send_file(path, as_attachment=True, mimetype='text/plain')
 
 @app.route('/api/export/docx', methods=['POST'])
 def export_docx():
-    """Export text as Word document"""
-    try:
-        data = request.get_json()
-        text = data.get('text', '')
-        filename = data.get('filename', 'document')
-        
-        output_path = create_word_document(text, filename)
-        
-        return send_file(
-            output_path,
-            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            as_attachment=True,
-            download_name=os.path.basename(output_path)
-        )
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    data = request.get_json()
+    path = create_word_document(
+        data.get('text', ''),
+        data.get('filename', 'document'),
+        data.get('translated', False),
+        data.get('translate_lang')
+    )
+    return send_file(path, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+@app.route('/api/tts', methods=['POST'])
+def tts_endpoint():
+    data = request.get_json()
+    text = data.get('text', '').strip()
+    if not text:
+        return jsonify({'error': 'No text provided for TTS'}), 400
+    path = create_audio_file(
+        text,
+        data.get('gender', 'male'),
+        data.get('tone', 'neutral'),
+        data.get('filename', 'document')
+    )
+    return send_file(path, as_attachment=True, mimetype='audio/mpeg')
 
 @app.route('/health')
 def health():
-    return jsonify({
-        'status': 'healthy',
-        'version': '2.0',
-        'features': {
-            'pdf_support': True,
-            'txt_export': True,
-            'docx_export': True
-        }
-    })
+    return jsonify({'status': 'healthy', 'version': '5.0'})
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))

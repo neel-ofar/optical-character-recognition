@@ -2,11 +2,15 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
-    tesseract-ocr-eng \
+    tesseract-ocr-all \
     libtesseract-dev \
     libgl1 \
     libglib2.0-0 \
-    poppler-utils \  
+    poppler-utils \
+    espeak-ng \
+    libespeak-ng1 \
+    libasound2 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -16,8 +20,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY templates ./templates
+COPY static ./static
 
-RUN mkdir -p uploads results
+RUN mkdir -p uploads results exports
 
 ENV PYTHONUNBUFFERED=1
 ENV PORT=5000
